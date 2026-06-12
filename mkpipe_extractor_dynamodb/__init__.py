@@ -33,7 +33,19 @@ class DynamoDBExtractor(BaseExtractor, variant='dynamodb'):
         ddb_table = dynamodb.Table(table.name)
 
         scan_kwargs = {}
-        if table.replication_method.value == 'incremental' and last_point and table.iterate_column:
+        has_static_bounds = table.filter_lower_bound is not None or table.filter_upper_bound is not None
+
+        if table.replication_method.value == 'incremental' and table.iterate_column and has_static_bounds:
+            from boto3.dynamodb.conditions import Attr
+            filter_expr = None
+            if table.filter_lower_bound is not None:
+                filter_expr = Attr(table.iterate_column).gte(table.filter_lower_bound)
+            if table.filter_upper_bound is not None:
+                upper_expr = Attr(table.iterate_column).lt(table.filter_upper_bound)
+                filter_expr = filter_expr & upper_expr if filter_expr else upper_expr
+            scan_kwargs['FilterExpression'] = filter_expr
+            write_mode = 'overwrite'
+        elif table.replication_method.value == 'incremental' and last_point and table.iterate_column:
             from boto3.dynamodb.conditions import Attr
             scan_kwargs['FilterExpression'] = Attr(table.iterate_column).gt(last_point)
             write_mode = 'append'
