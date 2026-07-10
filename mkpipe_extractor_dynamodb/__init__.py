@@ -34,20 +34,32 @@ class DynamoDBExtractor(BaseExtractor, variant='dynamodb'):
 
         scan_kwargs = {}
         has_static_bounds = table.filter_lower_bound is not None or table.filter_upper_bound is not None
+        columns = table.iterate_columns
+        is_multi = table.is_multi_iterate_column
 
         if table.replication_method.value == 'incremental' and table.iterate_column and has_static_bounds:
             from boto3.dynamodb.conditions import Attr
-            filter_expr = None
-            if table.filter_lower_bound is not None:
-                filter_expr = Attr(table.iterate_column).gte(table.filter_lower_bound)
-            if table.filter_upper_bound is not None:
-                upper_expr = Attr(table.iterate_column).lt(table.filter_upper_bound)
-                filter_expr = filter_expr & upper_expr if filter_expr else upper_expr
-            scan_kwargs['FilterExpression'] = filter_expr
+            combined = None
+            for col in columns:
+                col_expr = None
+                if table.filter_lower_bound is not None:
+                    col_expr = Attr(col).gte(table.filter_lower_bound)
+                if table.filter_upper_bound is not None:
+                    upper = Attr(col).lt(table.filter_upper_bound)
+                    col_expr = col_expr & upper if col_expr else upper
+                combined = col_expr if combined is None else (combined | col_expr)
+            scan_kwargs['FilterExpression'] = combined
             write_mode = 'append'
         elif table.replication_method.value == 'incremental' and last_point and table.iterate_column:
             from boto3.dynamodb.conditions import Attr
-            scan_kwargs['FilterExpression'] = Attr(table.iterate_column).gt(last_point)
+            if is_multi:
+                combined = None
+                for col in columns:
+                    cond = Attr(col).gte(last_point)
+                    combined = cond if combined is None else (combined | cond)
+                scan_kwargs['FilterExpression'] = combined
+            else:
+                scan_kwargs['FilterExpression'] = Attr(columns[0]).gte(last_point)
             write_mode = 'append'
         else:
             write_mode = 'overwrite'
@@ -91,7 +103,11 @@ class DynamoDBExtractor(BaseExtractor, variant='dynamodb'):
         last_point_value = None
         if table.replication_method.value == 'incremental' and table.iterate_column:
             from pyspark.sql import functions as F
-            row = df.agg(F.max(table.iterate_column).alias('max_val')).first()
+            if is_multi:
+                max_expr = F.greatest(*[F.max(F.col(c)) for c in columns])
+                row = df.select(max_expr.alias('max_val')).first()
+            else:
+                row = df.agg(F.max(columns[0]).alias('max_val')).first()
             if row and row['max_val'] is not None:
                 last_point_value = str(row['max_val'])
 

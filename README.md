@@ -86,7 +86,7 @@ By default DynamoDB is scanned sequentially (single segment). Setting `partition
 | `name` | string | required | DynamoDB table name |
 | `target_name` | string | required | Destination table name |
 | `replication_method` | `full` / `incremental` | `full` | Replication strategy |
-| `iterate_column` | string | — | Attribute used for incremental `FilterExpression` |
+| `iterate_column` | string or list | — | Attribute(s) for incremental `FilterExpression`. String for single column, list for multi-column OR logic |
 | `partitions_count` | int | `1` | Number of parallel scan segments |
 | `tags` | list | `[]` | Tags for selective pipeline execution |
 | `pass_on_error` | bool | `false` | Skip table on error instead of failing |
