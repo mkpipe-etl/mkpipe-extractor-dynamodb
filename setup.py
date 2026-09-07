@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mkpipe-extractor-dynamodb',
-    version='0.3.0',
+    version='0.4.0',
     license='Apache License 2.0',
     packages=find_packages(),
     install_requires=['mkpipe', 'boto3'],
