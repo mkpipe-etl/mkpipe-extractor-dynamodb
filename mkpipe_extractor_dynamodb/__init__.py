@@ -102,14 +102,10 @@ class DynamoDBExtractor(BaseExtractor, variant='dynamodb'):
 
         last_point_value = None
         if table.replication_method.value == 'incremental' and table.iterate_column:
-            from pyspark.sql import functions as F
-            if is_multi:
-                max_expr = F.greatest(*[F.max(F.col(c)) for c in columns])
-                row = df.select(max_expr.alias('max_val')).first()
-            else:
-                row = df.agg(F.max(columns[0]).alias('max_val')).first()
-            if row and row['max_val'] is not None:
-                last_point_value = str(row['max_val'])
+            values = [pdf[c].max() for c in columns]
+            values = [v for v in values if v is not None and not pd.isna(v)]
+            if values:
+                last_point_value = str(max(values))
 
         logger.info({
             'table': table.target_name,
